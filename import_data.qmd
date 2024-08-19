@@ -5,7 +5,6 @@ format: html
 
 ## Packages
 
-
 ```{r}
 library(duckdb)
 library(dplyr)

@@ -1,0 +1,12 @@
+---
+title: "Query data"
+format: html
+---
+
+## Packages
+
+```{r}
+library(duckdb)
+library(dplyr)
+library(glue)
+```
