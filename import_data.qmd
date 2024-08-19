@@ -43,7 +43,7 @@ for(y in years){
   query <- glue("INSERT INTO sih 
           SELECT res_codigo_adotado AS cod_res, 
           int_MUNCOD AS cod_int, 
-          DT_INTER AS dt_inter, def_ident, def_car_int 
+          DT_INTER AS dt_inter, def_ident, def_car_int, DIAG_PRINC 
           FROM read_csv('/media/raphael/lacie/pcdas_sih/csv/*[y]*.csv',
           delim = ',',
           header = true,
