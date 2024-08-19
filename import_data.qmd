@@ -62,7 +62,6 @@ for(y in years){
 
 ## Close database connection
 
-
 ```{r}
 dbDisconnect(con)
 ```
