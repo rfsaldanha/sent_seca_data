@@ -28,13 +28,11 @@ dbExecute(con, "CREATE TABLE sih (
 
 ## Parameters
 
-
 ```{r}
 years <- 2008:2023
 ```
 
 ## Import data
-
 
 ```{r}
 for(y in years){
