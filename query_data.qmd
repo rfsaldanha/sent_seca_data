@@ -8,5 +8,115 @@ format: html
 ```{r}
 library(duckdb)
 library(dplyr)
+library(tidyr)
 library(glue)
+library(stringr)
+```
+
+## Reference data
+
+Municipality codes used on the system.
+
+```{r}
+cod_munic <- readRDS(file = "cod_munic.rds")
+```
+
+## Database and table connection
+
+```{r}
+con <- dbConnect(duckdb(), dbdir = "pcdas_sih.duckdb", read_only = TRUE)
+
+sih_tbl <- dplyr::tbl(con, "sih") |>
+    filter(year(dt_inter) >= 2008 & year(dt_inter) <= 2023) |>
+    filter(def_idade_anos >= 0 & def_idade_anos <= 150) |>
+    filter(!is.na(def_idade_anos))
+```
+
+## Queries
+
+```{r}
+cod_mun_sih <- sih_tbl |>
+    distinct(cod_res) |>
+    pull(cod_res)
+```
+
+### Internação por Diarreia e Gastroenterite Origem Infecção Presumível (A09)
+
+```{r}
+tab_a09 <- sih_tbl |>
+    filter(DIAG_PRINC %like% "A09%") |>
+    mutate(
+        year = year(dt_inter),
+        month = month(dt_inter),
+        age_group = cut(
+            x = def_idade_anos, 
+            breaks = c(-Inf,4,9,19,64,1000), 
+            labels = c("4","509","1019","2064","6500")
+        )
+    ) |>
+    summarise(freq = n(), .by = c(cod_res, year, month, age_group)) |>
+    ungroup() |>
+    collect() |>
+    complete(cod_res=cod_mun_sih, year=2008:2023, month=1:12, age_group=c("4","509","1019","2064","6500"),
+        fill = list(freq = 0)) |>
+    select(cod_res, year, month, age_group, freq) |>
+    arrange(cod_res, year, month)
+
+View(tab_a09)
+```
+
+### Taxa de internação por asma (J45)
+
+```{r}
+tab_j45 <- sih_tbl |>
+    filter(DIAG_PRINC %like% "J45%") |>
+    mutate(
+        year = year(dt_inter),
+        month = month(dt_inter),
+        age_group = cut(
+            x = def_idade_anos, 
+            breaks = c(-Inf,4,9,19,64,1000), 
+            labels = c("4","509","1019","2064","6500")
+        )
+    ) |>
+    summarise(freq = n(), .by = c(cod_res, year, month, age_group)) |>
+    ungroup() |>
+    collect() |>
+    complete(cod_res=cod_mun_sih, year=2008:2023, month=1:12, age_group=c("4","509","1019","2064","6500"),
+        fill = list(freq = 0)) |>
+    select(cod_res, year, month, age_group, freq) |>
+    arrange(cod_res, year, month)
+
+head(tab_j45)
+```
+
+## Taxa de Internação por Dengue
+
+```{r}
+tab_a90 <- sih_tbl |>
+    filter(DIAG_PRINC %like% "A90%" | DIAG_PRINC %like% "A91%") |>
+    mutate(
+        year = year(dt_inter),
+        month = month(dt_inter),
+        age_group = cut(
+            x = def_idade_anos, 
+            breaks = c(-Inf,4,9,19,64,1000), 
+            labels = c("4","509","1019","2064","6500")
+        )
+    ) |>
+    summarise(freq = n(), .by = c(cod_res, year, month, age_group)) |>
+    ungroup() |>
+    collect() |>
+    complete(cod_res=cod_mun_sih, year=2008:2023, month=1:12, age_group=c("4","509","1019","2064","6500"),
+        fill = list(freq = 0)) |>
+    select(cod_res, year, month, age_group, freq) |>
+    arrange(cod_res, year, month)
+
+head(tab_a90)
+```
+
+## Close database connection
+
+```{r}
+dbDisconnect(con)
 ```
