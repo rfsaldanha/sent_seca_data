@@ -20,8 +20,6 @@ dbExecute(con, "CREATE TABLE sih (
     cod_res VARCHAR,
     cod_int VARCHAR,
     dt_inter DATE,
-    def_ident VARCHAR,
-    def_car_int VARCHAR,
     DIAG_PRINC VARCHAR
 )")
 ```
@@ -40,7 +38,7 @@ for(y in years){
   query <- glue("INSERT INTO sih 
           SELECT res_codigo_adotado AS cod_res, 
           int_MUNCOD AS cod_int, 
-          DT_INTER AS dt_inter, def_ident, def_car_int, DIAG_PRINC 
+          DT_INTER AS dt_inter, DIAG_PRINC 
           FROM read_csv('/media/raphael/lacie/pcdas_sih/csv/*[y]*.csv',
           delim = ',',
           header = true,
@@ -48,8 +46,6 @@ for(y in years){
           types = {'res_codigo_adotado': 'VARCHAR',
           'int_MUNCOD': 'VARCHAR',
           'dt_inter': 'DATE',
-          'def_ident': 'VARCHAR',
-          'def_car_int': 'VARCHAR',
           'DIAG_PRINC': 'VARCHAR'},
           union_by_name = true
           )", .open = "[", .close = "]")
