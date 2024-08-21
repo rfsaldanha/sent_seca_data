@@ -38,3 +38,4 @@ rsconnect/
 *.wal
 .vscode
 *.*csv#
+*.csv
