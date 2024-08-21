@@ -11,6 +11,7 @@ library(dplyr)
 library(tidyr)
 library(glue)
 library(stringr)
+library(brpop)
 ```
 
 ## Reference data
@@ -19,6 +20,8 @@ Municipality codes used on the system.
 
 ```{r}
 cod_munic <- readRDS(file = "cod_munic.rds")
+
+cod_munic_char <- as.character(cod_munic)
 ```
 
 ## Database and table connection
@@ -27,18 +30,13 @@ cod_munic <- readRDS(file = "cod_munic.rds")
 con <- dbConnect(duckdb(), dbdir = "pcdas_sih.duckdb", read_only = TRUE)
 
 sih_tbl <- dplyr::tbl(con, "sih") |>
+    filter(cod_res %in% cod_munic_char) |>
     filter(year(dt_inter) >= 2008 & year(dt_inter) <= 2023) |>
     filter(def_idade_anos >= 0 & def_idade_anos <= 150) |>
     filter(!is.na(def_idade_anos))
 ```
 
 ## Queries
-
-```{r}
-cod_mun_sih <- sih_tbl |>
-    distinct(cod_res) |>
-    pull(cod_res)
-```
 
 ### Internação por Diarreia e Gastroenterite Origem Infecção Presumível (A09)
 
@@ -57,12 +55,12 @@ tab_a09 <- sih_tbl |>
     summarise(freq = n(), .by = c(cod_res, year, month, age_group)) |>
     ungroup() |>
     collect() |>
-    complete(cod_res=cod_mun_sih, year=2008:2023, month=1:12, age_group=c("4","509","1019","2064","6500"),
+    complete(cod_res=cod_munic_char, year=2008:2023, month=1:12, age_group=c("4","509","1019","2064","6500"),
         fill = list(freq = 0)) |>
     select(cod_res, year, month, age_group, freq) |>
     arrange(cod_res, year, month)
 
-View(tab_a09)
+head(tab_a09)
 ```
 
 ### Taxa de internação por asma (J45)
@@ -82,7 +80,7 @@ tab_j45 <- sih_tbl |>
     summarise(freq = n(), .by = c(cod_res, year, month, age_group)) |>
     ungroup() |>
     collect() |>
-    complete(cod_res=cod_mun_sih, year=2008:2023, month=1:12, age_group=c("4","509","1019","2064","6500"),
+    complete(cod_res=cod_munic_char, year=2008:2023, month=1:12, age_group=c("4","509","1019","2064","6500"),
         fill = list(freq = 0)) |>
     select(cod_res, year, month, age_group, freq) |>
     arrange(cod_res, year, month)
@@ -107,7 +105,7 @@ tab_a90 <- sih_tbl |>
     summarise(freq = n(), .by = c(cod_res, year, month, age_group)) |>
     ungroup() |>
     collect() |>
-    complete(cod_res=cod_mun_sih, year=2008:2023, month=1:12, age_group=c("4","509","1019","2064","6500"),
+    complete(cod_res=cod_munic_char, year=2008:2023, month=1:12, age_group=c("4","509","1019","2064","6500"),
         fill = list(freq = 0)) |>
     select(cod_res, year, month, age_group, freq) |>
     arrange(cod_res, year, month)
@@ -120,3 +118,120 @@ head(tab_a90)
 ```{r}
 dbDisconnect(con)
 ```
+
+## Compute rates
+
+```{r}
+pop <- brpop::mun_pop_age() |>
+  filter(code_muni %in% cod_munic_char) |>
+  mutate(age_group = case_match(
+    age_group,
+    "From 0 to 4 years" ~ "4",
+    "From 5 to 9 years" ~ "509",
+    "From 10 to 14 years" ~ "1019",
+    "From 15 to 19 years" ~ "1019",
+    "From 20 to 24 years" ~ "2064",
+    "From 25 to 29 years" ~ "2064",
+    "From 30 to 34 years" ~ "2064",
+    "From 35 to 39 years" ~ "2064",
+    "From 40 to 44 years" ~ "2064",
+    "From 45 to 49 years" ~ "2064",
+    "From 50 to 54 years" ~ "2064",
+    "From 55 to 59 years" ~ "2064",
+    "From 60 to 64 years" ~ "2064",
+    "From 65 to 69 years" ~ "6500",
+    "From 70 to 74 years" ~ "6500",
+    "From 75 to 79 years" ~ "6500",
+    "From 80 years or more" ~ "6500",
+    .default = age_group
+  )) |>
+  filter(age_group != "Total") |>
+  mutate(code_muni = as.character(code_muni)) |>
+  rename(cod_res = code_muni) |>
+  summarise(pop = sum(pop, na.rm = TRUE), .by = c(cod_res, year, age_group)) |>
+  ungroup()
+```
+
+```{r}
+const_pop <- 100000
+```
+
+```{r}
+tab_a09_rate <- left_join(tab_a09, pop, by = c("cod_res", "year", "age_group")) |>
+  mutate(rate = round(freq/pop*const_pop, 2)) |>
+  select(-freq, -pop)
+
+tab_a90_rate <- left_join(tab_a90, pop, by = c("cod_res", "year", "age_group")) |>
+  mutate(rate = round(freq/pop*const_pop, 2)) |>
+  select(-freq, -pop)
+
+tab_j45_rate <- left_join(tab_j45, pop, by = c("cod_res", "year", "age_group")) |>
+  mutate(rate = round(freq/pop*const_pop, 2)) |>
+  select(-freq, -pop)
+```
+
+## Format tables to application
+
+```{r}
+munic_names <- readRDS("munic_names.rds") |>
+  mutate(cod_munic = as.character(cod_munic))
+
+mes <- readRDS("mes.rds") |>
+  as.data.frame() |>
+  mutate(cod = as.numeric(cod))
+```
+
+```{r}
+tab5 <- left_join(tab_a09_rate, munic_names, by = c("cod_res" = "cod_munic")) |>
+  left_join(mes, by = c("month" = "cod")) |>
+  mutate(anomes = paste0(year, str_pad(month, 2, pad = "0"))) |>
+  select(ano = year, mes = desc, sigla, nome_munic, valor = rate, cod_munic = cod_res, fx_etaria = age_group, anomes) |>
+  mutate(
+    ano = as.integer(ano),
+    mes = as.factor(mes),
+    sigla = as.factor(sigla),
+    nome_munic = as.factor(nome_munic),
+    cod_munic = as.integer(cod_munic),
+    fx_etaria = as.integer(fx_etaria),
+    anomes = as.integer(anomes)
+  )
+```
+
+```{r}
+tab4 <- left_join(tab_a90_rate, munic_names, by = c("cod_res" = "cod_munic")) |>
+  left_join(mes, by = c("month" = "cod")) |>
+  mutate(anomes = paste0(year, str_pad(month, 2, pad = "0"))) |>
+  select(ano = year, mes = desc, sigla, nome_munic, valor = rate, cod_munic = cod_res, fx_etaria = age_group, anomes) |>
+  mutate(
+    ano = as.integer(ano),
+    mes = as.factor(mes),
+    sigla = as.factor(sigla),
+    nome_munic = as.factor(nome_munic),
+    cod_munic = as.integer(cod_munic),
+    fx_etaria = as.integer(fx_etaria),
+    anomes = as.integer(anomes)
+  )
+```
+
+```{r}
+tab2 <- left_join(tab_j45_rate, munic_names, by = c("cod_res" = "cod_munic")) |>
+  left_join(mes, by = c("month" = "cod")) |>
+  mutate(anomes = paste0(year, str_pad(month, 2, pad = "0"))) |>
+  select(ano = year, mes = desc, sigla, nome_munic, valor = rate, cod_munic = cod_res, fx_etaria = age_group, anomes) |>
+  mutate(
+    ano = as.integer(ano),
+    mes = as.factor(mes),
+    sigla = as.factor(sigla),
+    nome_munic = as.factor(nome_munic),
+    cod_munic = as.integer(cod_munic),
+    fx_etaria = as.integer(fx_etaria),
+    anomes = as.integer(anomes)
+  )
+```
+
+```{r}
+saveRDS(tab5, "tab5.rds")
+saveRDS(tab4, "tab4.rds")
+saveRDS(tab2, "tab2.rds")
+```
+
